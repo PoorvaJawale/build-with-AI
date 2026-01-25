@@ -3,6 +3,9 @@ from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
 from fastapi import FastAPI, Body, Request
+from dotenv import load_dotenv
+
+load_dotenv()
 
 api_key = os.getenv("GOOGLE_API_KEY")
 
@@ -15,18 +18,23 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://build-with-ai.vercel.app", # Example Vercel URL
+    "https://ai-frontend-poorva.onrender.com" # Example Render URL
+]
+
 # IMPORTANT: Update with your Vercel URL during the hackathon
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["*"], 
+    allow_credentials=False, # This MUST be False if origins is ["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Set your API Key (Use Environment Variables for safety)
-genai.configure(api_key="YOUR_GEMINI_API_KEY")
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Using GOOGLE_API_KEY from environment only; no hardcoded key
 
 @app.get("/")
 def home():
@@ -35,58 +43,74 @@ def home():
 @app.post("/api/execute")
 @app.post("/api/execute/")
 async def execute_workflow(request: Request, workflow: dict = Body(...)):
-    print(f"Received request at: {request.url}") # This will show in Render logs
-    
+    print(f"Received request at: {request.url}")
+
     nodes = workflow.get("nodes", [])
     edges = workflow.get("edges", [])
-    
-    # 1. Map node IDs to their data for easy lookup
-    node_map = {n['id']: n for n in nodes}
-    
-    # 2. Find the starting Input Node
-    current_input = ""
-    for node in nodes:
-        if node['type'] == 'inputNode':
-            current_input = node['data'].get('label', '')
 
-    # 3. Follow the connections (Edges)
-    # This finds which node the Input Node is connected to
-    for edge in edges:
-        target_node = node_map.get(edge['target'])
-        if target_node and target_node['type'] == 'aiNode':
-            system_prompt = target_node['data'].get('prompt', '')
-            
-            # Combine the instruction with the user input
-            full_query = f"{system_prompt}\n\nUser Input: {current_input}"
-            
-            # Call Gemini
-            response = model.generate_content(full_query)
-            current_input = response.text
+    node_map = {n.get('id'): n for n in nodes}
+    connections = {e.get('source'): e.get('target') for e in edges}
 
-    return {"result": current_input}
+    # Determine start: prefer inputNode, else dataSourceNode
+    start_node = next((n for n in nodes if n.get('type') == 'inputNode'), None)
+    if not start_node:
+        start_node = next((n for n in nodes if n.get('type') == 'dataSourceNode'), None)
 
-@app.post("/api/execute")
-async def execute_workflow(workflow: dict = Body(...)):
-    nodes = workflow.get("nodes", [])
-    edges = workflow.get("edges", [])
-    
-    # 1. Create a map of connections
-    # source_id -> target_id
-    connections = {edge['source']: edge['target'] for edge in edges}
-    
-    # 2. Find the starting node (the one that is an 'input' type)
-    current_node = next((n for n in nodes if n['type'] == 'input'), None)
-    current_data = current_node['data'].get('label', '') if current_node else ""
+    current_text = ''
+    if start_node:
+        if start_node.get('type') == 'inputNode':
+            current_text = start_node.get('data', {}).get('label', '')
+        elif start_node.get('type') == 'dataSourceNode':
+            current_text = start_node.get('data', {}).get('sourceText', '')
 
-    # 3. Follow the path
-    while current_node and current_node['id'] in connections:
-        target_id = connections[current_node['id']]
-        current_node = next((n for n in nodes if n['id'] == target_id), None)
-        
-        if current_node and current_node['type'] == 'aiNode':
-            prompt = current_node['data'].get('prompt', '')
-            # Call Gemini with the cumulative data
-            response = model.generate_content(f"{prompt}\n\nContext: {current_data}")
-            current_data = response.text
-            
-    return {"result": current_data}
+    memory_value = ''
+    current_id = start_node.get('id') if start_node else None
+
+    # Traverse linear connections
+    while current_id and current_id in connections:
+        target_id = connections[current_id]
+        target_node = node_map.get(target_id)
+        if not target_node:
+            break
+
+        ntype = target_node.get('type')
+        data = target_node.get('data', {})
+
+        if ntype == 'aiNode':
+            prompt = data.get('prompt', '')
+            query = f"{prompt}\n\nInput: {current_text}"
+            try:
+                response = model.generate_content(query)
+                current_text = response.text
+            except Exception as e:
+                current_text = f"[AI error] {e}"
+
+        elif ntype == 'toolNode':
+            op = data.get('operation', 'uppercase')
+            if op == 'uppercase':
+                current_text = (current_text or '').upper()
+            elif op == 'lowercase':
+                current_text = (current_text or '').lower()
+            elif op == 'word_count':
+                wc = len((current_text or '').split())
+                current_text = f"Word count: {wc}\n\n{current_text}"
+
+        elif ntype == 'memoryNode':
+            memory_value = current_text
+            note = data.get('note', '')
+            current_text = f"{current_text}\n\n[Memory saved]{(': ' + note) if note else ''}"
+
+        elif ntype == 'dataSourceNode':
+            current_text = data.get('sourceText', '')
+
+        elif ntype == 'outputNode':
+            break
+
+        current_id = target_id
+
+    result = current_text
+    if memory_value:
+        result = f"{result}\n\n[Memory]: {memory_value}"
+    return {"result": result}
+
+# single consolidated route above handles execution
