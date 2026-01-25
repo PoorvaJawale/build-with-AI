@@ -25,9 +25,14 @@ const initialNodes = [
   { id: '3', type: 'outputNode', data: { label: 'Output will appear here' }, position: { x: 250, y: 350 } },
 ];
 
+const initialEdges = [
+  { id: 'e1-2', source: '1', target: '2' },
+  { id: 'e2-3', source: '2', target: '3' },
+];
+
 export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [output, setOutput] = useState("");
 
   // FIX 1: Define these functions BEFORE useMemo
@@ -98,31 +103,48 @@ export default function App() {
   const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
   const runWorkflow = async () => {
-    setOutput("Processing...");
-    try {
-      const response = await fetch(
-        (process.env.REACT_APP_BACKEND_URL || 'https://ai-backend-poorva.onrender.com') + '/api/execute',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nodes, edges }),
-        }
-      );
+    if (edges.length === 0) {
+      setOutput("Error: No connections! Please connect your blocks by dragging from one block's handle to another.");
+      return;
+    }
 
-      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    setOutput("Processing...");
+    console.log('Sending to backend:', { nodes, edges });
+
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://ai-backend-poorva.onrender.com';
+      console.log('Backend URL:', backendUrl);
+
+      const response = await fetch(backendUrl + '/api/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodes, edges }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Backend error:', errorText);
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
 
       const data = await response.json();
+      console.log('Backend response:', data);
       const resultText = data.result || data.output;
+
+      if (!resultText) {
+        setOutput("Warning: Backend returned empty result. Check console for details.");
+        return;
+      }
 
       setOutput(resultText);
 
-      // This MAGIC line puts the result inside the Output Node block!
       setNodes((nds) => nds.map((node) =>
         node.type === 'outputNode' ? { ...node, data: { ...node.data, label: resultText } } : node
       ));
 
     } catch (err) {
-      setOutput("Error: " + err.message);
+      console.error('Workflow error:', err);
+      setOutput(`Error: ${err.message}\n\nTip: Make sure your blocks are connected and you've filled in the required fields.`);
     }
   };
 
@@ -196,8 +218,23 @@ export default function App() {
 
   const resetFlow = () => {
     setNodes(initialNodes);
-    setEdges([]);
+    setEdges(initialEdges);
     setOutput("");
+  };
+
+  const loadExample = () => {
+    const exampleNodes = [
+      { id: '1', type: 'inputNode', data: { label: 'Hello World' }, position: { x: 250, y: 0 } },
+      { id: '2', type: 'aiNode', position: { x: 250, y: 150 }, data: { prompt: 'Translate this to Spanish' } },
+      { id: '3', type: 'outputNode', data: { label: 'Output will appear here' }, position: { x: 250, y: 350 } },
+    ];
+    const exampleEdges = [
+      { id: 'e1-2', source: '1', target: '2' },
+      { id: 'e2-3', source: '2', target: '3' },
+    ];
+    setNodes(exampleNodes);
+    setEdges(exampleEdges);
+    setOutput("Example loaded! Click 'Run Flow' to see it work.");
   };
 
   return (
@@ -238,12 +275,16 @@ export default function App() {
             ⬆️ Upload
           </button>
 
+          <button onClick={loadExample} style={{ background: '#6366f1', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>
+            Load Example
+          </button>
+
           <button onClick={resetFlow} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>
             Reset
           </button>
 
           <button onClick={runWorkflow} style={{ background: '#10b981', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '5px', cursor: 'pointer' }}>
-            ▶ Run Flow
+            Run Flow
           </button>
         </div>
       </header>
@@ -264,8 +305,14 @@ export default function App() {
       </div>
 
       <div style={{ height: '120px', background: '#f8fafc', padding: '15px', borderTop: '2px solid #e2e8f0', overflowY: 'auto' }}>
-        <strong>Console Output:</strong>
-        <p style={{ marginTop: '5px', whiteSpace: 'pre-wrap' }}>{output}</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <strong>Console Output:</strong>
+          <span style={{ fontSize: '12px', color: '#64748b' }}>
+            Blocks: {nodes.length} | Connections: {edges.length}
+            {edges.length === 0 && <span style={{ color: '#ef4444', fontWeight: 'bold' }}> - No connections!</span>}
+          </span>
+        </div>
+        <p style={{ marginTop: '5px', whiteSpace: 'pre-wrap' }}>{output || "Ready to run. Type in the User Input box, add a prompt to the AI block, then click Run Flow."}</p>
       </div>
     </div>
   );
