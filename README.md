@@ -4,7 +4,6 @@
 
 The goal of this repository is to explore how AI can assist in **software development, automation, and application building**, while documenting the learning journey through practical implementations.
 
----
 
 # 📚 About This Repository
 
@@ -19,7 +18,6 @@ It focuses on:
 
 Each folder or project in this repository represents a **separate experiment or mini-project built with AI support**.
 
----
 
 # 🚀 Objectives
 
@@ -30,7 +28,6 @@ The main goals of this repository are:
 * Understand how AI can improve **productivity and coding workflows**
 * Document learning progress while building applications
 
----
 
 # 🛠️ Technologies Used
 
@@ -44,7 +41,6 @@ The projects in this repository may include:
 * AI coding assistants
 * Git & GitHub
 
----
 
 # 📁 Repository Structure
 
@@ -58,7 +54,6 @@ build-with-AI/
 └── README.md            # Repository documentation
 ```
 
----
 
 # 💡 What You Will Find Here
 
@@ -70,7 +65,6 @@ Inside this repository you may find:
 * Practice projects
 * Development experiments
 
----
 
 # 🧠 Learning Approach
 
@@ -81,7 +75,6 @@ This repository follows a **"Learn by Building"** approach:
 3. Implement and test the solution
 4. Document the results
 
----
 
 # 👩‍💻 Author
 
@@ -90,13 +83,11 @@ This repository follows a **"Learn by Building"** approach:
 Engineering Student
 Interested in **Artificial Intelligence, Python Development, and Financial Technology**
 
----
 
 # 📌 Note
 
 This repository is part of an ongoing **learning journey with AI-assisted development**.
 Projects will continue to be added as new concepts and technologies are explored.
 
----
 
 ⭐ If you find this repository interesting, feel free to **star the repo or explore the projects.**
